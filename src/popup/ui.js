@@ -7,13 +7,13 @@
  * @version 1.0.0
  */
 
+const BACKEND_BASE_URL = "http://localhost:3000/api";
 (function() {
   'use strict';
 
   // ============================================================================
   // DOM Element References
   // ============================================================================
-
   const elements = {
     // Control buttons
     micButton: document.getElementById('micButton'),
@@ -597,22 +597,37 @@
     setUIState('processing');
     
     try {
-      // Simulate API call delay
-      await delay(config.responseDelay);
-      
-      // Generate mock response
-      const response = generateMockResponse(transcript);
-      
-      // Update UI to responding state
+      const response = await fetch(`${BACKEND_BASE_URL}/process`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text: transcript
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Backend request failed');
+      }
+
+      const result = await response.json();
+
+      // console.log("Backend Result:", result);
+
       setUIState('responding');
-      
-      // Display response
-      displayResponse(response);
-      
-      // Return to ready state after brief delay
+
+      // Show AI message
+      displayResponse(result.message || 'Done');
+
+      // 🔊 Speak response (optional for now)
+      speakText(result.message);
+
+      // 👉 Send intent to router (Phase 2)
+      sendToRouter(result);
+
       await delay(500);
       setUIState('ready');
-      
     } catch (error) {
       console.error('Error processing transcript:', error);
       showError({
@@ -623,6 +638,14 @@
       setUIState('error');
     }
   };
+
+  const sendToRouter = (data) => {
+    chrome.runtime.sendMessage({
+      type: 'INTENT_RESULT',
+      payload: data
+    });
+  };
+
 
   /**
    * Generate a mock AI response based on transcript
@@ -685,6 +708,18 @@
       button.style.transform = '';
     }, 150);
   };
+
+  const speakText = (text) => {
+    if (!text) return;
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    speechSynthesis.speak(utterance);
+  };
+
 
   /**
    * Format timestamp for display
